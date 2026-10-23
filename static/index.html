@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AetherVision // Wi-Fi Sensing & RF Radar</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;800&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="hud-overlay"></div>
+
+  <header class="app-header">
+    <div class="logo-zone">
+      <div class="radar-ping-icon"></div>
+      <div>
+        <h1 class="brand-title">AETHER<span>VISION</span></h1>
+        <p class="brand-sub">PASSIVE RF MICROWAVE SENSING & 2D SPATIAL RADAR</p>
+      </div>
+    </div>
+
+    <div class="header-badges">
+      <div class="badge">
+        <span class="badge-label">SSID</span>
+        <span class="badge-value" id="net-ssid">---</span>
+      </div>
+      <div class="badge">
+        <span class="badge-label">GATEWAY</span>
+        <span class="badge-value" id="net-gw">---</span>
+      </div>
+      <div class="badge">
+        <span class="badge-label">MODE</span>
+        <span class="badge-value highlight" id="sys-mode">WINDOWS WLAN</span>
+      </div>
+      <div class="status-indicator live" id="live-indicator">
+        <span class="dot"></span> LIVE // 12 HZ
+      </div>
+    </div>
+  </header>
+
+  <main class="dashboard-grid">
+    <!-- Left: 2D Spatial RF Imaging Radar -->
+    <section class="panel radar-panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="panel-tag">[CAM 01]</span> 2D SPATIAL RF WAVEFORM & FRESNEL FIELD
+        </div>
+        <div class="radar-legend">
+          <span class="legend-item"><span class="legend-color tx-color"></span> TX: ROUTER</span>
+          <span class="legend-item"><span class="legend-color rx-color"></span> RX: LAPTOP</span>
+          <span class="legend-item"><span class="legend-color wave-color"></span> MULTIPATH REFLECTION</span>
+        </div>
+      </div>
+
+      <div class="radar-canvas-container">
+        <canvas id="radarCanvas"></canvas>
+        <div class="radar-crosshairs"></div>
+        <div class="radar-range-markers">
+          <span>0.5m</span>
+          <span>1.0m</span>
+          <span>2.0m</span>
+          <span>3.0m</span>
+        </div>
+      </div>
+
+      <div class="radar-footer">
+        <div class="rf-metric">
+          <span class="metric-title">CARRIER FREQUENCY</span>
+          <span class="metric-val">2.4 GHz (λ ≈ 12.5cm)</span>
+        </div>
+        <div class="rf-metric">
+          <span class="metric-title">ANTENNA APERTURE</span>
+          <span class="metric-val">Bistatic LAN Baseline</span>
+        </div>
+        <div class="rf-metric">
+          <span class="metric-title">ESTIMATED RANGE</span>
+          <span class="metric-val" id="est-range">~3.5 Meters</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right: Telemetry & Sensing Status -->
+    <aside class="panel telemetry-panel">
+      <!-- Motion State Banner -->
+      <div class="state-banner" id="stateBanner">
+        <div class="state-tag">ENVIRONMENT STATUS</div>
+        <div class="state-title" id="stateTitle">INITIALIZING...</div>
+        <div class="state-sub" id="stateSub">Analyzing microwave reflections...</div>
+      </div>
+
+      <!-- Perturbation Gauge -->
+      <div class="perturbation-box">
+        <div class="meter-header">
+          <span>RF PERTURBATION INDEX</span>
+          <span class="meter-val" id="perturbScore">0.0%</span>
+        </div>
+        <div class="meter-track">
+          <div class="meter-fill" id="perturbBar"></div>
+        </div>
+      </div>
+
+      <!-- Live Metric Cards -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="card-label">SIGNAL QUALITY</div>
+          <div class="card-val" id="metricQuality">--%</div>
+          <div class="card-sub" id="metricRssi">-- dBm</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="card-label">FLIGHT TIME (RTT)</div>
+          <div class="card-val" id="metricRtt">-- ms</div>
+          <div class="card-sub" id="metricJitter">Jitter: -- ms</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="card-label">LINK SPEED (RX)</div>
+          <div class="card-val" id="metricRx">-- Mbps</div>
+          <div class="card-sub" id="metricTx">Tx: -- Mbps</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="card-label">NOISE VARIANCE</div>
+          <div class="card-val" id="metricVar">0.00</div>
+          <div class="card-sub">Multipath Deviation</div>
+        </div>
+      </div>
+
+      <!-- Controls & Calibration -->
+      <div class="control-box">
+        <button id="btnCalibrate" class="hud-btn primary">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/>
+          </svg>
+          CALIBRATE QUIET ROOM
+        </button>
+
+        <div class="slider-row">
+          <label for="sensitivitySlider">SENSITIVITY: <span id="sensVal">1.0x</span></label>
+          <input type="range" id="sensitivitySlider" min="0.5" max="3.0" step="0.1" value="1.0">
+        </div>
+
+        <div class="toggle-row">
+          <label>AUDIO INTRUSION CHIME</label>
+          <input type="checkbox" id="chkAudio">
+        </div>
+      </div>
+
+      <!-- Hardware Upgrade Info -->
+      <div class="hardware-box">
+        <div class="hw-title">
+          <span class="hw-icon">⚡</span> CSI HARDWARE PORT
+        </div>
+        <p class="hw-desc">
+          Currently running <strong>Native Windows PHY Telemetry</strong>. 
+          Plug an <strong>ESP32 ($4)</strong> into USB at any time to unlock full 64-subcarrier OFDM CSI amplitude & phase imaging.
+        </p>
+      </div>
+    </aside>
+
+    <!-- Bottom: Real-Time Oscilloscope Waveform -->
+    <section class="panel timeline-panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span class="panel-tag">[OSC 01]</span> TIME-SERIES RF WAVE DISTURBANCE & MICRO-JITTER
+        </div>
+        <div class="timeline-legend">
+          <span class="legend-item"><span class="legend-color trace-perturb"></span> PERTURBATION ENVELOPE</span>
+          <span class="legend-item"><span class="legend-color trace-rtt"></span> PACKET FLIGHT RTT (MS)</span>
+        </div>
+      </div>
+      <div class="canvas-wrapper">
+        <canvas id="timelineCanvas"></canvas>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/radar.js"></script>
+</body>
+</html>
