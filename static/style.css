@@ -190,6 +190,96 @@ body {
   color: #fff;
 }
 
+.panel-title-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.view-switcher {
+  display: flex;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 2px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 240, 255, 0.2);
+}
+
+.view-toggle-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.view-toggle-btn.active {
+  background: rgba(0, 240, 255, 0.25);
+  color: var(--cyan-glow);
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.3);
+  font-weight: bold;
+}
+
+.cam-presets {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.cam-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.5px;
+}
+
+.cam-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cam-btn:hover, .cam-btn.active {
+  background: rgba(0, 240, 255, 0.2);
+  border-color: var(--cyan-glow);
+  color: #fff;
+}
+
+.viewport-3d {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  cursor: grab;
+}
+
+.viewport-3d:active {
+  cursor: grabbing;
+}
+
+.orbit-hint {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-size: 0.6rem;
+  color: rgba(0, 240, 255, 0.6);
+  background: rgba(4, 8, 16, 0.6);
+  padding: 0.25rem 0.5rem;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 240, 255, 0.2);
+  pointer-events: none;
+}
+
 .panel-tag {
   color: var(--cyan-glow);
   font-weight: bold;

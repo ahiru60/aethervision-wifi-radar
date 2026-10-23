@@ -3,11 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AetherVision // Wi-Fi Sensing & RF Radar</title>
+  <title>AetherVision // 3D Wi-Fi Sensing & RF Holography</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;800&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+  
+  <!-- Three.js 3D Engine & Orbit Controls (Local Offline Vendor) -->
+  <script src="/static/vendor/three.min.js"></script>
+  <script src="/static/vendor/OrbitControls.js"></script>
 </head>
 <body>
   <div class="hud-overlay"></div>
@@ -17,7 +21,7 @@
       <div class="radar-ping-icon"></div>
       <div>
         <h1 class="brand-title">AETHER<span>VISION</span></h1>
-        <p class="brand-sub">PASSIVE RF MICROWAVE SENSING & 2D SPATIAL RADAR</p>
+        <p class="brand-sub">PASSIVE RF MICROWAVE SENSING & 3D HOLOGRAPHIC ROOM RADAR</p>
       </div>
     </div>
 
@@ -41,27 +45,51 @@
   </header>
 
   <main class="dashboard-grid">
-    <!-- Left: 2D Spatial RF Imaging Radar -->
+    <!-- Left: Spatial RF Visualizer (3D WebGL / 2D Tactical) -->
     <section class="panel radar-panel">
       <div class="panel-header">
-        <div class="panel-title">
-          <span class="panel-tag">[CAM 01]</span> 2D SPATIAL RF WAVEFORM & FRESNEL FIELD
+        <div class="panel-title-group">
+          <span class="panel-tag">[SPATIAL RF]</span>
+          <div class="view-switcher">
+            <button id="btnView3D" class="view-toggle-btn active">3D HOLOGRAPHIC</button>
+            <button id="btnView2D" class="view-toggle-btn">2D TACTICAL</button>
+          </div>
         </div>
+
+        <!-- 3D Camera Controls Toolbar -->
+        <div class="cam-presets" id="camPresets">
+          <span class="cam-label">CAM:</span>
+          <button class="cam-btn active" data-preset="isometric">ISO</button>
+          <button class="cam-btn" data-preset="top">TOP</button>
+          <button class="cam-btn" data-preset="los">LOS</button>
+        </div>
+
         <div class="radar-legend">
           <span class="legend-item"><span class="legend-color tx-color"></span> TX: ROUTER</span>
           <span class="legend-item"><span class="legend-color rx-color"></span> RX: LAPTOP</span>
-          <span class="legend-item"><span class="legend-color wave-color"></span> MULTIPATH REFLECTION</span>
+          <span class="legend-item"><span class="legend-color wave-color"></span> FRESNEL ZONE</span>
         </div>
       </div>
 
-      <div class="radar-canvas-container">
-        <canvas id="radarCanvas"></canvas>
-        <div class="radar-crosshairs"></div>
-        <div class="radar-range-markers">
+      <!-- Main Visualizer Container -->
+      <div class="radar-canvas-container" id="visualizerContainer">
+        <!-- 3D WebGL Viewport -->
+        <div id="viewport3D" class="viewport-3d"></div>
+
+        <!-- 2D Canvas Viewport (hidden in 3D mode) -->
+        <canvas id="radarCanvas" style="display: none;"></canvas>
+
+        <div class="radar-crosshairs" id="crosshairs2D" style="display: none;"></div>
+        <div class="radar-range-markers" id="rangeMarkers2D" style="display: none;">
           <span>0.5m</span>
           <span>1.0m</span>
           <span>2.0m</span>
           <span>3.0m</span>
+        </div>
+
+        <!-- 3D Orbit Tip Overlay -->
+        <div class="orbit-hint" id="orbitHint">
+          <span>DRAG TO ORBIT // SCROLL TO ZOOM</span>
         </div>
       </div>
 
@@ -71,12 +99,12 @@
           <span class="metric-val">2.4 GHz (λ ≈ 12.5cm)</span>
         </div>
         <div class="rf-metric">
-          <span class="metric-title">ANTENNA APERTURE</span>
-          <span class="metric-val">Bistatic LAN Baseline</span>
+          <span class="metric-title">3D FRESNEL GEOMETRY</span>
+          <span class="metric-val">Prolate Spheroid (1st Zone)</span>
         </div>
         <div class="rf-metric">
-          <span class="metric-title">ESTIMATED RANGE</span>
-          <span class="metric-val" id="est-range">~3.5 Meters</span>
+          <span class="metric-title">ESTIMATED APERTURE</span>
+          <span class="metric-val" id="est-range">~3.8m Room Baseline</span>
         </div>
       </div>
     </section>
@@ -177,6 +205,7 @@
     </section>
   </main>
 
+  <script src="/static/scene3d.js"></script>
   <script src="/static/radar.js"></script>
 </body>
 </html>

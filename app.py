@@ -74,13 +74,12 @@ async def telemetry_background_worker():
                     "adapter": "WLAN Adapter"
                 }
 
-            # 2. Probe Sub-millisecond Packet Flight Latency
-            # Run in thread executor to not block async loop on socket
+            # 2. Probe High-Resolution Packet Flight Latency Burst (3 probes per sample)
             loop = asyncio.get_event_loop()
-            rtt_ms = await loop.run_in_executor(None, rf_probe.probe_flight_latency)
+            probe_data = await loop.run_in_executor(None, rf_probe.probe_burst_latency, 3)
 
-            # 3. Process signal variance and perturbation index
-            sensing = signal_processor.feed_sample(telem, rtt_ms)
+            # 3. Process dual-band Doppler and perturbation index
+            sensing = signal_processor.feed_sample(telem, probe_data)
 
             # 4. Generate 2D spatial RF interference grid (24x15)
             rf_grid = signal_processor.generate_synthetic_rf_grid(
@@ -105,8 +104,8 @@ async def telemetry_background_worker():
         except Exception as e:
             print(f"[Worker Error] {e}")
 
-        # Target ~12 Hz sampling rate (~80ms interval)
-        await asyncio.sleep(0.08)
+        # High-precision 20 Hz sampling rate (~50ms interval)
+        await asyncio.sleep(0.05)
 
 @app.on_event("startup")
 async def startup_event():

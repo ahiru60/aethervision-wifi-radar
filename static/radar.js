@@ -5,10 +5,15 @@ const radarCtx = radarCanvas.getContext('2d');
 const timelineCanvas = document.getElementById('timelineCanvas');
 const timelineCtx = timelineCanvas.getContext('2d');
 
+// 3D Scene Instance
+let scene3D = null;
+let currentViewMode = '3D'; // '3D' or '2D'
+
 // State Histories
 const MAX_HISTORY = 140;
 const historyPerturb = new Array(MAX_HISTORY).fill(0);
 const historyRtt = new Array(MAX_HISTORY).fill(15);
+const historyLoco = new Array(MAX_HISTORY).fill(0);
 
 let latestTelemetry = null;
 let latestSensing = null;
@@ -27,6 +32,7 @@ function resizeCanvases() {
     const ctx = c.getContext('2d');
     ctx.scale(dpr, dpr);
   });
+  if (scene3D) scene3D.onResize();
 }
 window.addEventListener('resize', resizeCanvases);
 
@@ -66,8 +72,9 @@ function initWebSocket() {
   socket = new WebSocket(wsUrl);
 
   socket.onopen = () => {
-    document.getElementById('live-indicator').classList.add('live');
-    document.getElementById('live-indicator').innerHTML = '<span class="dot"></span> LIVE // 12 HZ';
+    const ind = document.getElementById('live-indicator');
+    ind.classList.add('live');
+    ind.innerHTML = '<span class="dot"></span> LIVE // 20 HZ';
   };
 
   socket.onmessage = (event) => {
@@ -78,6 +85,11 @@ function initWebSocket() {
         latestSensing = data.sensing;
         updateUI(data.sensing, data.telemetry, data.router_gateway);
         
+        // Feed into 3D Volumetric Scene
+        if (scene3D) {
+          scene3D.updateData(data.sensing, data.telemetry);
+        }
+
         // Push to oscilloscope history
         historyPerturb.shift();
         historyPerturb.push(data.sensing.perturbation_index);
@@ -85,7 +97,10 @@ function initWebSocket() {
         historyRtt.shift();
         historyRtt.push(data.sensing.raw_rtt);
 
-        if (data.sensing.perturbation_index > 40.0) {
+        historyLoco.shift();
+        historyLoco.push(data.sensing.locomotion_energy || 0);
+
+        if (data.sensing.perturbation_index > 35.0) {
           playChime(780);
         }
       }
@@ -96,8 +111,9 @@ function initWebSocket() {
   };
 
   socket.onclose = () => {
-    document.getElementById('live-indicator').classList.remove('live');
-    document.getElementById('live-indicator').innerHTML = '<span class="dot"></span> RECONNECTING...';
+    const ind = document.getElementById('live-indicator');
+    ind.classList.remove('live');
+    ind.innerHTML = '<span class="dot"></span> RECONNECTING...';
     setTimeout(initWebSocket, 2000);
   };
 }
@@ -122,8 +138,12 @@ function updateUI(sensing, telem, gateway) {
     bar.style.width = `${Math.min(100, score)}%`;
 
     document.getElementById('metricRtt').textContent = `${sensing.raw_rtt} ms`;
-    document.getElementById('metricJitter').textContent = `Jitter: ±${sensing.rtt_jitter_ms} ms`;
-    document.getElementById('metricVar').textContent = sensing.signal_variance;
+    document.getElementById('metricJitter').textContent = `Jitter: ±${sensing.rtt_jitter_ms} ms (Disp: ${sensing.dispersion_ms || 0}ms)`;
+    
+    // Show locomotion & breathing energy
+    const loco = sensing.locomotion_energy !== undefined ? sensing.locomotion_energy : 0;
+    const breath = sensing.breathing_energy !== undefined ? sensing.breathing_energy : 0;
+    document.getElementById('metricVar').textContent = `L:${loco} B:${breath}`;
 
     // State banner update
     const banner = document.getElementById('stateBanner');
@@ -132,140 +152,133 @@ function updateUI(sensing, telem, gateway) {
     title.textContent = sensing.motion_state;
     title.style.color = sensing.state_color;
 
-    if (score < 12.0) {
+    if (score < 10.0) {
       banner.style.borderColor = 'rgba(0, 255, 136, 0.4)';
       banner.style.background = 'rgba(0, 255, 136, 0.06)';
       sub.textContent = 'Room ambient reflections steady. No spatial Doppler shift.';
-    } else if (score < 35.0) {
+    } else if (score < 28.0) {
       banner.style.borderColor = 'rgba(255, 190, 11, 0.4)';
       banner.style.background = 'rgba(255, 190, 11, 0.08)';
-      sub.textContent = 'Micro-perturbation detected (breathing, typing, subtle torso sway).';
+      sub.textContent = `Micro-motion detected (Breathing Energy: ${breath}). Ambient noise rejected.`;
     } else {
       banner.style.borderColor = 'rgba(255, 0, 85, 0.5)';
       banner.style.background = 'rgba(255, 0, 85, 0.12)';
-      sub.textContent = 'ACTIVE INTRUSION: Large multipath phase disruption in line of sight.';
+      sub.textContent = `ACTIVE INTRUSION: Locomotion Energy: ${loco} | Multipath phase disrupted.`;
     }
   }
 }
 
-// 2D Spatial RF Radar Canvas Loop
+// 2D Spatial RF Radar Canvas Loop (active in 2D mode)
 function renderRadar() {
-  const rect = radarCanvas.getBoundingClientRect();
-  const w = rect.width;
-  const h = rect.height;
+  if (currentViewMode === '2D') {
+    const rect = radarCanvas.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
 
-  radarCtx.clearRect(0, 0, w, h);
+    radarCtx.clearRect(0, 0, w, h);
 
-  // 1. Draw Background Grid & Range Rings
-  radarCtx.strokeStyle = 'rgba(0, 240, 255, 0.08)';
-  radarCtx.lineWidth = 1;
-  const cx = w / 2;
-  const cy = h / 2;
+    // 1. Draw Background Grid & Range Rings
+    radarCtx.strokeStyle = 'rgba(0, 240, 255, 0.08)';
+    radarCtx.lineWidth = 1;
+    const cx = w / 2;
+    const cy = h / 2;
 
-  // Concentric range circles
-  for (let r = 40; r < Math.max(w, h); r += 50) {
+    for (let r = 40; r < Math.max(w, h); r += 50) {
+      radarCtx.beginPath();
+      radarCtx.arc(cx, cy, r, 0, Math.PI * 2);
+      radarCtx.stroke();
+    }
+
     radarCtx.beginPath();
-    radarCtx.arc(cx, cy, r, 0, Math.PI * 2);
+    radarCtx.moveTo(0, cy); radarCtx.lineTo(w, cy);
+    radarCtx.moveTo(cx, 0); radarCtx.lineTo(cx, h);
     radarCtx.stroke();
-  }
 
-  // Cross lines
-  radarCtx.beginPath();
-  radarCtx.moveTo(0, cy); radarCtx.lineTo(w, cy);
-  radarCtx.moveTo(cx, 0); radarCtx.lineTo(cx, h);
-  radarCtx.stroke();
+    // 2. Draw 2D Synthetic RF Fresnel Heatmap
+    if (latestGrid && latestGrid.length > 0) {
+      const rows = latestGrid.length;
+      const cols = latestGrid[0].length;
+      const cellW = w / cols;
+      const cellH = h / rows;
 
-  // 2. Draw 2D Synthetic RF Fresnel Heatmap
-  if (latestGrid && latestGrid.length > 0) {
-    const rows = latestGrid.length;
-    const cols = latestGrid[0].length;
-    const cellW = w / cols;
-    const cellH = h / rows;
-
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const val = latestGrid[r][c]; // 0.0 to 1.0
-        if (val > 0.15) {
-          radarCtx.fillStyle = getHeatmapColor(val, latestSensing ? latestSensing.perturbation_index : 0);
-          radarCtx.fillRect(c * cellW, r * cellH, cellW + 1, cellH + 1);
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const val = latestGrid[r][c];
+          if (val > 0.15) {
+            radarCtx.fillStyle = getHeatmapColor(val, latestSensing ? latestSensing.perturbation_index : 0);
+            radarCtx.fillRect(c * cellW, r * cellH, cellW + 1, cellH + 1);
+          }
         }
       }
     }
+
+    // 3. Node Positions: Router (TX) and Laptop (RX)
+    const txX = w * 0.18;
+    const txY = cy;
+    const rxX = w * 0.82;
+    const rxY = cy;
+
+    const perturb = latestSensing ? latestSensing.perturbation_index : 0;
+    radarCtx.beginPath();
+    radarCtx.moveTo(txX, txY);
+
+    const steps = 30;
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const curX = txX + (rxX - txX) * t;
+      const noise = perturb > 15 
+        ? Math.sin(t * 20 + Date.now() * 0.015) * (perturb * 0.45) 
+        : Math.sin(t * 10 + Date.now() * 0.005) * 2;
+      radarCtx.lineTo(curX, cy + noise);
+    }
+    radarCtx.lineTo(rxX, rxY);
+
+    radarCtx.strokeStyle = perturb > 28 ? 'rgba(255, 0, 85, 0.8)' : 'rgba(0, 240, 255, 0.6)';
+    radarCtx.lineWidth = perturb > 28 ? 3 : 1.5;
+    radarCtx.shadowColor = perturb > 28 ? '#ff0055' : '#00f0ff';
+    radarCtx.shadowBlur = perturb > 28 ? 15 : 6;
+    radarCtx.stroke();
+    radarCtx.shadowBlur = 0;
+
+    // 4. Draw TX / RX Icons
+    const now = Date.now() * 0.003;
+    drawTransmitterNode(txX, txY, '#ff0055', 'TX: ROUTER (192.168.1.1)', now);
+    drawReceiverNode(rxX, rxY, '#00f0ff', 'RX: LAPTOP (PROBE)', now);
+
+    // 5. Draw Target Scattering Ghost if Motion is Detected
+    if (perturb > 22.0) {
+      const ghostX = txX + (rxX - txX) * 0.48 + Math.sin(Date.now() * 0.005) * 25;
+      const ghostY = cy + Math.cos(Date.now() * 0.004) * 35;
+      drawTargetEcho(ghostX, ghostY, perturb);
+    }
+
+    // 6. Tactical Radar Sweep Line
+    radarSweepAngle += 0.025;
+    const sweepLen = Math.max(w, h);
+    radarCtx.save();
+    radarCtx.translate(cx, cy);
+    radarCtx.rotate(radarSweepAngle);
+    
+    const sweepGrad = radarCtx.createLinearGradient(0, 0, sweepLen, 0);
+    sweepGrad.addColorStop(0, 'rgba(0, 240, 255, 0.3)');
+    sweepGrad.addColorStop(1, 'transparent');
+    radarCtx.fillStyle = sweepGrad;
+    radarCtx.beginPath();
+    radarCtx.moveTo(0, 0);
+    radarCtx.arc(0, 0, sweepLen, -0.25, 0);
+    radarCtx.closePath();
+    radarCtx.fill();
+    radarCtx.restore();
   }
-
-  // 3. Node Positions: Router (TX) and Laptop (RX)
-  const txX = w * 0.18;
-  const txY = cy;
-  const rxX = w * 0.82;
-  const rxY = cy;
-
-  // Draw Line-of-Sight Microwave Beam with Dynamic Perturbation Glitch
-  const perturb = latestSensing ? latestSensing.perturbation_index : 0;
-  radarCtx.beginPath();
-  radarCtx.moveTo(txX, txY);
-
-  const steps = 30;
-  for (let i = 1; i < steps; i++) {
-    const t = i / steps;
-    const curX = txX + (rxX - txX) * t;
-    // Jitter perpendicular to beam if perturbed
-    const noise = perturb > 15 
-      ? Math.sin(t * 20 + Date.now() * 0.015) * (perturb * 0.45) 
-      : Math.sin(t * 10 + Date.now() * 0.005) * 2;
-    radarCtx.lineTo(curX, cy + noise);
-  }
-  radarCtx.lineTo(rxX, rxY);
-
-  radarCtx.strokeStyle = perturb > 35 
-    ? 'rgba(255, 0, 85, 0.8)' 
-    : 'rgba(0, 240, 255, 0.6)';
-  radarCtx.lineWidth = perturb > 35 ? 3 : 1.5;
-  radarCtx.shadowColor = perturb > 35 ? '#ff0055' : '#00f0ff';
-  radarCtx.shadowBlur = perturb > 35 ? 15 : 6;
-  radarCtx.stroke();
-  radarCtx.shadowBlur = 0;
-
-  // 4. Draw TX / RX Icons & Pulsing Wavefronts
-  const now = Date.now() * 0.003;
-  drawTransmitterNode(txX, txY, '#ff0055', 'TX: ROUTER (192.168.1.1)', now);
-  drawReceiverNode(rxX, rxY, '#00f0ff', 'RX: LAPTOP (PROBE)', now);
-
-  // 5. Draw Target Scattering Ghost if Motion is Detected
-  if (perturb > 25.0) {
-    const ghostX = txX + (rxX - txX) * 0.48 + Math.sin(Date.now() * 0.005) * 25;
-    const ghostY = cy + Math.cos(Date.now() * 0.004) * 35;
-    drawTargetEcho(ghostX, ghostY, perturb);
-  }
-
-  // 6. Rotating Tactical Radar Sweep Line
-  radarSweepAngle += 0.025;
-  const sweepLen = Math.max(w, h);
-  radarCtx.save();
-  radarCtx.translate(cx, cy);
-  radarCtx.rotate(radarSweepAngle);
-  
-  const sweepGrad = radarCtx.createLinearGradient(0, 0, sweepLen, 0);
-  sweepGrad.addColorStop(0, 'rgba(0, 240, 255, 0.3)');
-  sweepGrad.addColorStop(1, 'transparent');
-  radarCtx.fillStyle = sweepGrad;
-  radarCtx.beginPath();
-  radarCtx.moveTo(0, 0);
-  radarCtx.arc(0, 0, sweepLen, -0.25, 0);
-  radarCtx.closePath();
-  radarCtx.fill();
-  radarCtx.restore();
 
   requestAnimationFrame(renderRadar);
 }
 
 function getHeatmapColor(val, perturb) {
-  // val is 0.0 to 1.0
-  if (perturb > 35) {
-    // Alert palette: Violet to hot magenta
+  if (perturb > 28) {
     const alpha = (val * 0.55).toFixed(2);
     return `rgba(255, 0, 120, ${alpha})`;
   } else {
-    // Normal palette: Deep cyan to emerald
     const alpha = (val * 0.4).toFixed(2);
     return `rgba(0, 240, 255, ${alpha})`;
   }
@@ -273,7 +286,6 @@ function getHeatmapColor(val, perturb) {
 
 function drawTransmitterNode(x, y, color, label, t) {
   radarCtx.save();
-  // Pulsing antenna rings
   for (let i = 0; i < 3; i++) {
     const r = ((t * 25 + i * 20) % 60);
     const alpha = Math.max(0, 1 - r / 60);
@@ -284,8 +296,6 @@ function drawTransmitterNode(x, y, color, label, t) {
     radarCtx.stroke();
   }
   radarCtx.globalAlpha = 1.0;
-
-  // Solid Core Node
   radarCtx.fillStyle = color;
   radarCtx.shadowColor = color;
   radarCtx.shadowBlur = 10;
@@ -293,8 +303,6 @@ function drawTransmitterNode(x, y, color, label, t) {
   radarCtx.arc(x, y, 7, 0, Math.PI * 2);
   radarCtx.fill();
   radarCtx.shadowBlur = 0;
-
-  // Text label
   radarCtx.fillStyle = '#cbd5e1';
   radarCtx.font = '10px "JetBrains Mono", monospace';
   radarCtx.fillText(label, x - 50, y + 25);
@@ -303,7 +311,6 @@ function drawTransmitterNode(x, y, color, label, t) {
 
 function drawReceiverNode(x, y, color, label, t) {
   radarCtx.save();
-  // Concentric inwards pulse
   const r = 20 - ((t * 20) % 20);
   radarCtx.strokeStyle = color;
   radarCtx.globalAlpha = 0.6;
@@ -311,8 +318,6 @@ function drawReceiverNode(x, y, color, label, t) {
   radarCtx.arc(x, y, r, 0, Math.PI * 2);
   radarCtx.stroke();
   radarCtx.globalAlpha = 1.0;
-
-  // Core Node
   radarCtx.fillStyle = color;
   radarCtx.shadowColor = color;
   radarCtx.shadowBlur = 10;
@@ -320,7 +325,6 @@ function drawReceiverNode(x, y, color, label, t) {
   radarCtx.arc(x, y, 7, 0, Math.PI * 2);
   radarCtx.fill();
   radarCtx.shadowBlur = 0;
-
   radarCtx.fillStyle = '#cbd5e1';
   radarCtx.font = '10px "JetBrains Mono", monospace';
   radarCtx.fillText(label, x - 40, y + 25);
@@ -334,17 +338,13 @@ function drawTargetEcho(x, y, perturb) {
   radarCtx.lineWidth = 2;
   radarCtx.shadowColor = '#ffbe0b';
   radarCtx.shadowBlur = 15;
-
-  // Crosshair marker
   radarCtx.beginPath();
   radarCtx.arc(x, y, radius, 0, Math.PI * 2);
   radarCtx.stroke();
-
   radarCtx.beginPath();
   radarCtx.moveTo(x - radius - 5, y); radarCtx.lineTo(x + radius + 5, y);
   radarCtx.moveTo(x, y - radius - 5); radarCtx.lineTo(x, y + radius + 5);
   radarCtx.stroke();
-
   radarCtx.fillStyle = '#ffbe0b';
   radarCtx.font = '10px "JetBrains Mono", monospace';
   radarCtx.fillText(`RF ECHO [Δ ${Math.round(perturb)}%]`, x + 15, y - 10);
@@ -416,7 +416,55 @@ function renderTimeline() {
   requestAnimationFrame(renderTimeline);
 }
 
+// View Mode Switching (3D Holographic vs 2D Tactical)
+function setViewMode(mode) {
+  currentViewMode = mode;
+  const btn3D = document.getElementById('btnView3D');
+  const btn2D = document.getElementById('btnView2D');
+  const v3D = document.getElementById('viewport3D');
+  const c2D = document.getElementById('radarCanvas');
+  const cross2D = document.getElementById('crosshairs2D');
+  const range2D = document.getElementById('rangeMarkers2D');
+  const camPresets = document.getElementById('camPresets');
+  const orbitHint = document.getElementById('orbitHint');
+
+  if (mode === '3D') {
+    btn3D.classList.add('active');
+    btn2D.classList.remove('active');
+    v3D.style.display = 'block';
+    c2D.style.display = 'none';
+    if (cross2D) cross2D.style.display = 'none';
+    if (range2D) range2D.style.display = 'none';
+    if (camPresets) camPresets.style.display = 'flex';
+    if (orbitHint) orbitHint.style.display = 'block';
+    if (scene3D) scene3D.onResize();
+  } else {
+    btn2D.classList.add('active');
+    btn3D.classList.remove('active');
+    v3D.style.display = 'none';
+    c2D.style.display = 'block';
+    if (cross2D) cross2D.style.display = 'block';
+    if (range2D) range2D.style.display = 'flex';
+    if (camPresets) camPresets.style.display = 'none';
+    if (orbitHint) orbitHint.style.display = 'none';
+    resizeCanvases();
+  }
+}
+
 // User Action Handlers
+document.getElementById('btnView3D').addEventListener('click', () => setViewMode('3D'));
+document.getElementById('btnView2D').addEventListener('click', () => setViewMode('2D'));
+
+// Camera Presets
+document.querySelectorAll('.cam-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    document.querySelectorAll('.cam-btn').forEach(b => b.classList.remove('active'));
+    e.target.classList.add('active');
+    const preset = e.target.getAttribute('data-preset');
+    if (scene3D) scene3D.setCameraPreset(preset);
+  });
+});
+
 document.getElementById('btnCalibrate').addEventListener('click', () => {
   if (socket && socket.readyState === WebSocket.OPEN) {
     socket.send(JSON.stringify({ action: 'calibrate' }));
@@ -440,6 +488,11 @@ sensSlider.addEventListener('input', (e) => {
 
 // Initialization
 window.addEventListener('DOMContentLoaded', () => {
+  const v3DContainer = document.getElementById('viewport3D');
+  if (window.RFScene3D && v3DContainer) {
+    scene3D = new window.RFScene3D(v3DContainer);
+  }
+
   resizeCanvases();
   initWebSocket();
   requestAnimationFrame(renderRadar);
