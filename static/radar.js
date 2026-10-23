@@ -26,11 +26,15 @@ let lastAudioBeep = 0;
 function resizeCanvases() {
   const dpr = window.devicePixelRatio || 1;
   [radarCanvas, timelineCanvas].forEach(c => {
+    if (!c) return;
     const rect = c.getBoundingClientRect();
-    c.width = rect.width * dpr;
-    c.height = rect.height * dpr;
-    const ctx = c.getContext('2d');
-    ctx.scale(dpr, dpr);
+    if (rect.width > 0 && rect.height > 0) {
+      c.width = rect.width * dpr;
+      c.height = rect.height * dpr;
+      const ctx = c.getContext('2d');
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset transform before scaling
+      ctx.scale(dpr, dpr);
+    }
   });
   if (scene3D) scene3D.onResize();
 }
@@ -490,7 +494,14 @@ sensSlider.addEventListener('input', (e) => {
 window.addEventListener('DOMContentLoaded', () => {
   const v3DContainer = document.getElementById('viewport3D');
   if (window.RFScene3D && v3DContainer) {
-    scene3D = new window.RFScene3D(v3DContainer);
+    try {
+      scene3D = new window.RFScene3D(v3DContainer);
+    } catch (e) {
+      console.warn("Could not start 3D WebGL scene, falling back to 2D tactical radar:", e);
+      setViewMode('2D');
+    }
+  } else {
+    setViewMode('2D');
   }
 
   resizeCanvases();

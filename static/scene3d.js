@@ -4,8 +4,8 @@
 class RFScene3D {
   constructor(containerElement) {
     this.container = containerElement;
-    this.width = this.container.clientWidth;
-    this.height = this.container.clientHeight;
+    this.width = Math.max(100, this.container.clientWidth || 800);
+    this.height = Math.max(100, this.container.clientHeight || 380);
     
     this.scene = null;
     this.camera = null;
@@ -29,41 +29,47 @@ class RFScene3D {
     this.motionState = "STATIC";
     this.clock = new THREE.Clock();
     
-    this.init();
+    try {
+      this.init();
+      console.log("[AetherVision] 3D WebGL Scene initialized successfully.");
+    } catch (err) {
+      console.error("[AetherVision] 3D initialization error:", err);
+    }
   }
 
   init() {
-    // 1. Scene & Fog
+    // 1. Scene
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x050811);
-    this.scene.fog = new THREE.FogExp2(0x050811, 0.04);
+    this.scene.background = new THREE.Color(0x060c18);
+    this.scene.fog = new THREE.FogExp2(0x060c18, 0.015);
 
     // 2. Camera
-    this.camera = new THREE.PerspectiveCamera(55, this.width / this.height, 0.1, 100);
-    this.setCameraPreset('isometric');
+    this.camera = new THREE.PerspectiveCamera(50, this.width / this.height, 0.1, 100);
+    this.camera.position.set(6.0, 5.0, 6.5);
+    this.camera.lookAt(0, 1.2, 0);
 
     // 3. Renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     this.renderer.setSize(this.width, this.height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.2;
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.container.appendChild(this.renderer.domElement);
 
-    // 4. Orbit Controls
-    this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.08;
-    this.controls.maxPolarAngle = Math.PI / 2 - 0.05; // Don't go below floor
-    this.controls.minDistance = 3;
-    this.controls.maxDistance = 25;
-    this.controls.target.set(0, 1.2, 0);
+    // 4. Orbit Controls (Safe check)
+    if (THREE.OrbitControls) {
+      this.controls = new THREE.OrbitControls(this.camera, this.renderer.domElement);
+      this.controls.enableDamping = true;
+      this.controls.dampingFactor = 0.08;
+      this.controls.maxPolarAngle = Math.PI / 2 - 0.05;
+      this.controls.minDistance = 2;
+      this.controls.maxDistance = 30;
+      this.controls.target.set(0, 1.2, 0);
+    }
 
     // 5. Lighting
-    const ambientLight = new THREE.AmbientLight(0x1a2639, 1.5);
-    this.scene.add(ambientLight);
+    const hemiLight = new THREE.HemisphereLight(0x00f0ff, 0x0f172a, 1.4);
+    this.scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight(0x00f0ff, 0.8);
+    const dirLight = new THREE.DirectionalLight(0x00f0ff, 1.0);
     dirLight.position.set(5, 10, 5);
     this.scene.add(dirLight);
 

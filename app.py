@@ -14,6 +14,15 @@ from engine.esp32_serial import ESP32CSIReader
 
 app = FastAPI(title="Wi-Fi Sensing & RF Radar Imaging")
 
+# Disable caching for real-time frontend assets
+@app.middleware("http")
+async def add_no_cache_header(request, call_next):
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
 # Serve static dashboard files
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 os.makedirs(static_dir, exist_ok=True)
