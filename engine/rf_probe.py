@@ -5,13 +5,9 @@ import re
 import numpy as np
 
 class GatewayRFProbe:
-    def __init__(self, target_ip=None, port=53):
-        self.port = port
+    def __init__(self, target_ip=None, port=None):
         self.target_ip = target_ip or self._detect_default_gateway() or "192.168.1.1"
-        self.sock = None
-        self._init_socket()
-        # High-speed DNS query packet
-        self.dns_query = b'\xaa\xbb\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x06router\x00\x00\x01\x00\x01'
+        self.port = port or self._detect_fast_tcp_port()
 
     def _detect_default_gateway(self):
         try:
@@ -23,39 +19,61 @@ class GatewayRFProbe:
             pass
         return "192.168.1.1"
 
-    def _init_socket(self):
-        try:
-            self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            self.sock.settimeout(0.04) # 40ms timeout per probe
-        except Exception as e:
-            print(f"[RFProbe] Socket init failed: {e}")
-
-    def probe_burst_latency(self, burst_count=3):
-        """
-        Sends a micro-burst train of 3 back-to-back probes per sampling cycle.
-        Returns:
-            median_rtt: Robust median flight time (rejects single-packet transmission hiccups)
-            jitter_dispersion: Inter-packet dispersion (variance across the train)
-            min_rtt: The physical propagation lower bound
-        """
-        if not self.sock:
-            self._init_socket()
-
-        rtts = []
-        for _ in range(burst_count):
-            t0 = time.perf_counter()
+    def _detect_fast_tcp_port(self):
+        """Find a responsive router port (80, 443, 53) that replies immediately via SYN-ACK or RST."""
+        for p in (80, 443, 53):
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(0.15)
             try:
-                self.sock.sendto(self.dns_query, (self.target_ip, self.port))
-                data, _ = self.sock.recvfrom(512)
-                rtt_ms = (time.perf_counter() - t0) * 1000.0
-                rtts.append(rtt_ms)
-            except (socket.timeout, Exception):
-                rtts.append(40.0)
+                s.connect((self.target_ip, p))
+                s.close()
+                return p
+            except ConnectionRefusedError:
+                # RST still proves immediate L2/L3 round-trip across Wi-Fi
+                s.close()
+                return p
+            except Exception:
+                s.close()
+        return 80
 
-        rtts_arr = np.array(rtts)
-        median_rtt = float(np.median(rtts_arr))
-        min_rtt = float(np.min(rtts_arr))
-        dispersion = float(np.std(rtts_arr))
+    def _single_tcp_probe(self):
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(0.06) # 60ms hard cap
+        t0 = time.perf_counter()
+        try:
+            s.connect((self.target_ip, self.port))
+            rtt_ms = (time.perf_counter() - t0) * 1000.0
+        except ConnectionRefusedError:
+            rtt_ms = (time.perf_counter() - t0) * 1000.0
+        except socket.timeout:
+            rtt_ms = 60.0
+        except Exception:
+            rtt_ms = (time.perf_counter() - t0) * 1000.0
+        finally:
+            try:
+                s.close()
+            except Exception:
+                pass
+        return rtt_ms
+
+    def probe_burst_latency(self, burst_count=4):
+        """
+        Sends a micro-burst train of TCP probes to the router.
+        Uses median and interquartile range (IQR) to eliminate single-packet contention spikes.
+        """
+        rtts = [self._single_tcp_probe() for _ in range(burst_count)]
+        rtts_arr = np.array(rtts, dtype=float)
+
+        # Reject timeout outliers if at least one packet succeeded
+        valid = rtts_arr[rtts_arr < 55.0]
+        if len(valid) == 0:
+            valid = rtts_arr
+
+        median_rtt = float(np.median(valid))
+        min_rtt = float(np.min(valid))
+        # IQR is far more resilient to single-packet spikes than standard deviation
+        q75, q25 = np.percentile(valid, [75, 25])
+        dispersion = float(q75 - q25)
 
         return {
             "median_rtt": round(median_rtt, 2),
@@ -63,15 +81,9 @@ class GatewayRFProbe:
             "dispersion_ms": round(dispersion, 2)
         }
 
-    # Backward compatible call
     def probe_flight_latency(self):
-        res = self.probe_burst_latency(burst_count=3)
+        res = self.probe_burst_latency(burst_count=4)
         return res["median_rtt"]
 
     def close(self):
-        if self.sock:
-            try:
-                self.sock.close()
-            except Exception:
-                pass
-            self.sock = None
+        pass
