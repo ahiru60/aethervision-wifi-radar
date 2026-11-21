@@ -7,11 +7,11 @@ A real-time Wi-Fi sensing and microwave radar visualizer designed to run on Wind
 ## ⚡ How It Works
 
 1. **Zero-Touch Router Integration:**
-   * Your router (`DEEZNTUS` at `192.168.1.1`) remains completely untouched and continues providing normal internet.
+   * Your home Wi-Fi router remains completely untouched and continues providing normal internet.
    * It acts as a continuous 2.4 GHz microwave radio transmitter beacon.
 
 2. **Native Windows Physical Layer Telemetry:**
-   * Uses Windows `wlanapi.dll` via `ctypes` to read real-time link telemetry, RSSI, and signal quality directly from your Wi-Fi card (`Realtek 802.11ac`).
+   * Uses Windows `wlanapi.dll` via `ctypes` to read real-time link telemetry, RSSI, and signal quality directly from your Wi-Fi adapter.
    * High-frequency micro-probes track packet flight latency (RTT) and jitter variations in sub-millisecond resolution.
 
 3. **Multipath Perturbation Engine:**
